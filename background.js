@@ -8,12 +8,6 @@ async function getSettings() {
   });
 }
 
-// 차단된 도메인 목록을 가져오는 헬퍼 함수 (하위 호환)
-async function getBlockedDomains() {
-  const { blockedDomains } = await getSettings();
-  return blockedDomains;
-}
-
 // URL에서 도메인을 추출하는 함수
 function extractDomain(url) {
   try {
@@ -24,14 +18,19 @@ function extractDomain(url) {
   }
 }
 
-// 도메인이 차단 목록에 있는지 확인 (서브도메인 포함)
+// 구버전 string[] 데이터를 {domain, enabled}[] 로 마이그레이션
+function migrate(domains) {
+  return domains.map((item) =>
+    typeof item === "string" ? { domain: item, enabled: true } : item
+  );
+}
+
+// 도메인이 활성화된 차단 목록에 있는지 확인 (서브도메인 포함)
 function isDomainBlocked(hostname, blockedDomains) {
-  return blockedDomains.some((blocked) => {
-    const blockedLower = blocked.toLowerCase().trim();
-    return (
-      hostname === blockedLower ||
-      hostname.endsWith("." + blockedLower)
-    );
+  return migrate(blockedDomains).some((item) => {
+    if (!item.enabled) return false;
+    const blockedLower = item.domain.toLowerCase().trim();
+    return hostname === blockedLower || hostname.endsWith("." + blockedLower);
   });
 }
 
@@ -65,6 +64,7 @@ async function checkAndBlockTab(tabId, url) {
 }
 
 // 탭 업데이트 이벤트 감지
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === "loading" && tab.url) {
     checkAndBlockTab(tabId, tab.url);

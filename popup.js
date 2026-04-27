@@ -14,22 +14,26 @@ function isValidDomain(domain) {
   return pattern.test(domain.trim());
 }
 
-// 도메인 정규화 (앞의 http/https, www 등 제거)
+// 도메인 정규화 (앞의 http/https 등 제거)
 function normalizeDomain(input) {
   let domain = input.trim().toLowerCase();
-  // http:// 또는 https:// 제거
   domain = domain.replace(/^https?:\/\//i, "");
-  // 경로 제거 (슬래시 이후)
   domain = domain.split("/")[0];
-  // 포트 제거
   domain = domain.split(":")[0];
   return domain;
+}
+
+// 구버전 string[] 데이터를 {domain, enabled}[] 로 마이그레이션
+function migrate(domains) {
+  return domains.map((item) =>
+    typeof item === "string" ? { domain: item, enabled: true } : item
+  );
 }
 
 // 저장소에서 도메인 불러오기
 function loadDomains(callback) {
   chrome.storage.sync.get({ blockedDomains: [] }, (result) => {
-    callback(result.blockedDomains);
+    callback(migrate(result.blockedDomains));
   });
 }
 
@@ -51,21 +55,40 @@ function renderList(domains) {
     return;
   }
 
-  domains.forEach((domain, index) => {
+  domains.forEach((item, index) => {
     const li = document.createElement("li");
-    li.className = "domain-item";
+    li.className = "domain-item" + (item.enabled ? "" : " item-disabled");
 
+    // 활성/비활성 체크박스
+    const checkLabel = document.createElement("label");
+    checkLabel.className = "item-check-label";
+    checkLabel.title = item.enabled ? "차단 활성" : "차단 비활성";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = item.enabled;
+    checkbox.addEventListener("change", () => toggleDomain(index, checkbox.checked));
+
+    const checkmark = document.createElement("span");
+    checkmark.className = "item-checkmark";
+
+    checkLabel.appendChild(checkbox);
+    checkLabel.appendChild(checkmark);
+
+    // 도메인 텍스트
     const span = document.createElement("span");
     span.className = "domain-text";
-    span.textContent = domain;
-    span.title = domain;
+    span.textContent = item.domain;
+    span.title = item.domain;
 
+    // 삭제 버튼
     const removeBtn = document.createElement("button");
     removeBtn.className = "remove-btn";
     removeBtn.textContent = "×";
     removeBtn.title = "삭제";
     removeBtn.addEventListener("click", () => removeDomain(index));
 
+    li.appendChild(checkLabel);
     li.appendChild(span);
     li.appendChild(removeBtn);
     domainList.appendChild(li);
@@ -85,12 +108,12 @@ function addDomain() {
   }
 
   loadDomains((domains) => {
-    if (domains.includes(domain)) {
+    if (domains.some((d) => d.domain === domain)) {
       showToast("이미 차단 목록에 있는 도메인입니다.");
       return;
     }
 
-    const updated = [domain, ...domains];
+    const updated = [{ domain, enabled: true }, ...domains];
     saveDomains(updated, () => {
       renderList(updated);
       domainInput.value = "";
@@ -100,10 +123,23 @@ function addDomain() {
   });
 }
 
+// 도메인 활성/비활성 토글
+function toggleDomain(index, enabled) {
+  loadDomains((domains) => {
+    const updated = domains.map((item, i) =>
+      i === index ? { ...item, enabled } : item
+    );
+    saveDomains(updated, () => {
+      renderList(updated);
+      showToast(`${updated[index].domain} 차단 ${enabled ? "활성화" : "비활성화"}됨`);
+    });
+  });
+}
+
 // 도메인 삭제
 function removeDomain(index) {
   loadDomains((domains) => {
-    const removed = domains[index];
+    const removed = domains[index].domain;
     const updated = domains.filter((_, i) => i !== index);
     saveDomains(updated, () => {
       renderList(updated);
