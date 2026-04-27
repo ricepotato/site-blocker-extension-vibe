@@ -1,9 +1,10 @@
 // 저장소에서 설정을 가져오는 헬퍼 함수
 async function getSettings() {
   return new Promise((resolve) => {
-    chrome.storage.sync.get({ blockedDomains: [], closeTabOnBlock: false }, (result) => {
-      resolve(result);
-    });
+    chrome.storage.sync.get(
+      { blockedDomains: [], closeTabOnBlock: false, blockingEnabled: true },
+      (result) => { resolve(result); }
+    );
   });
 }
 
@@ -55,7 +56,9 @@ async function checkAndBlockTab(tabId, url) {
   const hostname = extractDomain(url);
   if (!hostname) return;
 
-  const blockedDomains = await getBlockedDomains();
+  const { blockedDomains, blockingEnabled } = await getSettings();
+  if (!blockingEnabled) return;
+
   if (isDomainBlocked(hostname, blockedDomains)) {
     blockTab(tabId, hostname);
   }
@@ -75,7 +78,9 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
   const hostname = extractDomain(details.url);
   if (!hostname) return;
 
-  const { blockedDomains } = await getSettings();
+  const { blockedDomains, blockingEnabled } = await getSettings();
+  if (!blockingEnabled) return;
+
   if (isDomainBlocked(hostname, blockedDomains)) {
     blockTab(details.tabId, hostname);
   }

@@ -8,9 +8,16 @@
 </head>
 <body>
   <div class="container">
-    <header>
+    <header id="main-header">
       <img src="icons/icon32.png" alt="icon" class="header-icon" />
       <h1>피싱 사이트 차단</h1>
+      <label class="toggle-label" id="blocking-toggle-wrap" title="차단 활성/비활성">
+        <input type="checkbox" id="blocking-enabled" />
+        <span class="toggle-track">
+          <span class="toggle-thumb"></span>
+        </span>
+        <span class="toggle-text" id="blocking-status-text">ON</span>
+      </label>
     </header>
 
     <section class="input-section">

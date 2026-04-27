@@ -4,6 +4,9 @@ const clearBtn = document.getElementById("clear-btn");
 const domainList = document.getElementById("domain-list");
 const domainCount = document.getElementById("domain-count");
 const closeTabOption = document.getElementById("close-tab-option");
+const blockingEnabled = document.getElementById("blocking-enabled");
+const mainHeader = document.getElementById("main-header");
+const blockingStatusText = document.getElementById("blocking-status-text");
 
 // 도메인 유효성 검사
 function isValidDomain(domain) {
@@ -141,10 +144,18 @@ function showToast(message) {
   }, 2000);
 }
 
+// 헤더 및 토글 텍스트 상태 반영
+function applyBlockingState(enabled) {
+  blockingEnabled.checked = enabled;
+  blockingStatusText.textContent = enabled ? "ON" : "OFF";
+  mainHeader.classList.toggle("disabled", !enabled);
+}
+
 // 옵션 불러오기
 function loadOptions() {
-  chrome.storage.sync.get({ closeTabOnBlock: false }, (result) => {
+  chrome.storage.sync.get({ closeTabOnBlock: false, blockingEnabled: true }, (result) => {
     closeTabOption.checked = result.closeTabOnBlock;
+    applyBlockingState(result.blockingEnabled);
   });
 }
 
@@ -153,10 +164,19 @@ function saveOption() {
   chrome.storage.sync.set({ closeTabOnBlock: closeTabOption.checked });
 }
 
+// 차단 활성/비활성 저장 및 UI 반영
+function saveBlockingEnabled() {
+  const enabled = blockingEnabled.checked;
+  chrome.storage.sync.set({ blockingEnabled: enabled });
+  applyBlockingState(enabled);
+  showToast(enabled ? "차단 활성화됨" : "차단 일시 중단됨");
+}
+
 // 이벤트 등록
 addBtn.addEventListener("click", addDomain);
 clearBtn.addEventListener("click", clearAll);
 closeTabOption.addEventListener("change", saveOption);
+blockingEnabled.addEventListener("change", saveBlockingEnabled);
 
 domainInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addDomain();
