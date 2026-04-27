@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>사이트 차단 관리</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <img src="icons/icon32.png" alt="icon" class="header-icon" />
+      <h1>피싱 사이트 차단</h1>
+    </header>
+
+    <section class="input-section">
+      <label for="domain-input">차단할 도메인 추가</label>
+      <div class="input-row">
+        <input
+          type="text"
+          id="domain-input"
+          placeholder="예: example.com"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="add-btn">추가</button>
+      </div>
+      <p class="hint">서브도메인 포함 차단됩니다. (예: sub.example.com도 차단)</p>
+    </section>
+
+    <section class="options-section">
+      <label class="checkbox-label">
+        <input type="checkbox" id="close-tab-option" />
+        <span class="checkmark"></span>
+        차단 시 탭 즉시 닫기
+      </label>
+    </section>
+
+    <section class="list-section">
+      <div class="list-header">
+        <span id="domain-count">차단 목록 (0개)</span>
+        <button id="clear-btn" class="danger-btn">전체 삭제</button>
+      </div>
+      <ul id="domain-list">
+        <li class="empty-message">차단된 도메인이 없습니다.</li>
+      </ul>
+    </section>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
