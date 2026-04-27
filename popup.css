@@ -165,6 +165,32 @@ header.disabled .toggle-label input[type="checkbox"]:checked + .toggle-track .to
   background: #922b21;
 }
 
+#add-current-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 7px 0;
+  background: transparent;
+  color: #c0392b;
+  border: 1.5px dashed #e8a49e;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#add-current-btn:hover {
+  background: #fdecea;
+  border-color: #c0392b;
+}
+
+#add-current-btn:disabled {
+  color: #9aa0a6;
+  border-color: #dadce0;
+  cursor: default;
+  background: transparent;
+}
+
 .hint {
   margin-top: 6px;
   font-size: 11px;

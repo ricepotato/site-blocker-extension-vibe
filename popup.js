@@ -4,6 +4,7 @@ const clearBtn = document.getElementById("clear-btn");
 const domainList = document.getElementById("domain-list");
 const domainCount = document.getElementById("domain-count");
 const closeTabOption = document.getElementById("close-tab-option");
+const addCurrentBtn = document.getElementById("add-current-btn");
 const blockingEnabled = document.getElementById("blocking-enabled");
 const mainHeader = document.getElementById("main-header");
 const blockingStatusText = document.getElementById("blocking-status-text");
@@ -208,11 +209,68 @@ function saveBlockingEnabled() {
   showToast(enabled ? "차단 활성화됨" : "차단 일시 중단됨");
 }
 
+// 현재 탭의 도메인을 목록에 추가
+function addCurrentSite() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0];
+    if (!tab || !tab.url) {
+      showToast("현재 탭 URL을 가져올 수 없습니다.");
+      return;
+    }
+
+    const url = tab.url;
+    if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) {
+      showToast("브라우저 내부 페이지는 추가할 수 없습니다.");
+      return;
+    }
+
+    const domain = normalizeDomain(url);
+    if (!isValidDomain(domain)) {
+      showToast("유효한 도메인을 가진 페이지가 아닙니다.");
+      return;
+    }
+
+    loadDomains((domains) => {
+      if (domains.some((d) => d.domain === domain)) {
+        showToast("이미 차단 목록에 있는 도메인입니다.");
+        return;
+      }
+
+      const updated = [{ domain, enabled: true }, ...domains];
+      saveDomains(updated, () => {
+        renderList(updated);
+        showToast(`${domain} 차단 추가됨`);
+      });
+    });
+  });
+}
+
+// 현재 탭 도메인으로 버튼 텍스트 초기화
+function initAddCurrentBtn() {
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0];
+    if (!tab || !tab.url) return;
+
+    const url = tab.url;
+    if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) {
+      addCurrentBtn.disabled = true;
+      addCurrentBtn.textContent = "+ 현재 사이트 추가 불가";
+      return;
+    }
+
+    const domain = normalizeDomain(url);
+    if (domain) {
+      addCurrentBtn.textContent = `+ 현재 사이트 추가 (${domain})`;
+    }
+  });
+}
+
 // 이벤트 등록
 addBtn.addEventListener("click", addDomain);
 clearBtn.addEventListener("click", clearAll);
 closeTabOption.addEventListener("change", saveOption);
 blockingEnabled.addEventListener("change", saveBlockingEnabled);
+addCurrentBtn.addEventListener("click", addCurrentSite);
 
 domainInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") addDomain();
@@ -221,4 +279,5 @@ domainInput.addEventListener("keydown", (e) => {
 // 초기 로드
 loadDomains(renderList);
 loadOptions();
+initAddCurrentBtn();
 domainInput.focus();
