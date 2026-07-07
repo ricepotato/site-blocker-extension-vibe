@@ -10,13 +10,13 @@ body {
   width: 360px;
   min-height: 200px;
   max-height: 600px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .container {
   display: flex;
   flex-direction: column;
-  height: 100%;
 }
 
 /* Header */
@@ -144,7 +144,7 @@ header.disabled .toggle-label input[type="checkbox"]:checked + .toggle-track .to
   color: #bdc1c6;
 }
 
-#add-btn {
+#add-btn, #hijack-add-btn {
   padding: 8px 16px;
   background: #c0392b;
   color: white;
@@ -165,7 +165,7 @@ header.disabled .toggle-label input[type="checkbox"]:checked + .toggle-track .to
   background: #922b21;
 }
 
-#add-current-btn {
+#add-current-btn, #hijack-add-current-btn {
   width: 100%;
   margin-top: 8px;
   padding: 7px 0;
@@ -263,7 +263,7 @@ header.disabled .toggle-label input[type="checkbox"]:checked + .toggle-track .to
   margin-bottom: 8px;
 }
 
-#domain-count {
+.section-count {
   font-size: 12px;
   font-weight: 600;
   color: #5f6368;
@@ -288,26 +288,34 @@ header.disabled .toggle-label input[type="checkbox"]:checked + .toggle-track .to
   color: white;
 }
 
-#domain-list {
+.item-list {
   list-style: none;
   overflow-y: auto;
-  max-height: 320px;
+  max-height: 240px;
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-#domain-list::-webkit-scrollbar {
+.item-list::-webkit-scrollbar {
   width: 4px;
 }
 
-#domain-list::-webkit-scrollbar-track {
+.item-list::-webkit-scrollbar-track {
   background: transparent;
 }
 
-#domain-list::-webkit-scrollbar-thumb {
+.item-list::-webkit-scrollbar-thumb {
   background: #dadce0;
   border-radius: 4px;
+}
+
+/* 섹션 구분선 */
+.section-divider {
+  height: 8px;
+  background: #f5f7fa;
+  border-top: 1px solid #e8eaed;
+  border-bottom: 1px solid #e8eaed;
 }
 
 .empty-message {

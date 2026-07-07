@@ -9,6 +9,13 @@ const blockingEnabled = document.getElementById("blocking-enabled");
 const mainHeader = document.getElementById("main-header");
 const blockingStatusText = document.getElementById("blocking-status-text");
 
+const hijackInput = document.getElementById("hijack-input");
+const hijackAddBtn = document.getElementById("hijack-add-btn");
+const hijackClearBtn = document.getElementById("hijack-clear-btn");
+const hijackList = document.getElementById("hijack-list");
+const hijackCount = document.getElementById("hijack-count");
+const hijackAddCurrentBtn = document.getElementById("hijack-add-current-btn");
+
 // 도메인 유효성 검사
 function isValidDomain(domain) {
   const pattern = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
@@ -31,137 +38,6 @@ function migrate(domains) {
   );
 }
 
-// 저장소에서 도메인 불러오기
-function loadDomains(callback) {
-  chrome.storage.sync.get({ blockedDomains: [] }, (result) => {
-    callback(migrate(result.blockedDomains));
-  });
-}
-
-// 저장소에 도메인 저장
-function saveDomains(domains, callback) {
-  chrome.storage.sync.set({ blockedDomains: domains }, callback);
-}
-
-// 목록 UI 렌더링
-function renderList(domains) {
-  domainList.innerHTML = "";
-  domainCount.textContent = `차단 목록 (${domains.length}개)`;
-
-  if (domains.length === 0) {
-    const li = document.createElement("li");
-    li.className = "empty-message";
-    li.textContent = "차단된 도메인이 없습니다.";
-    domainList.appendChild(li);
-    return;
-  }
-
-  domains.forEach((item, index) => {
-    const li = document.createElement("li");
-    li.className = "domain-item" + (item.enabled ? "" : " item-disabled");
-
-    // 활성/비활성 체크박스
-    const checkLabel = document.createElement("label");
-    checkLabel.className = "item-check-label";
-    checkLabel.title = item.enabled ? "차단 활성" : "차단 비활성";
-
-    const checkbox = document.createElement("input");
-    checkbox.type = "checkbox";
-    checkbox.checked = item.enabled;
-    checkbox.addEventListener("change", () => toggleDomain(index, checkbox.checked));
-
-    const checkmark = document.createElement("span");
-    checkmark.className = "item-checkmark";
-
-    checkLabel.appendChild(checkbox);
-    checkLabel.appendChild(checkmark);
-
-    // 도메인 텍스트
-    const span = document.createElement("span");
-    span.className = "domain-text";
-    span.textContent = item.domain;
-    span.title = item.domain;
-
-    // 삭제 버튼
-    const removeBtn = document.createElement("button");
-    removeBtn.className = "remove-btn";
-    removeBtn.textContent = "×";
-    removeBtn.title = "삭제";
-    removeBtn.addEventListener("click", () => removeDomain(index));
-
-    li.appendChild(checkLabel);
-    li.appendChild(span);
-    li.appendChild(removeBtn);
-    domainList.appendChild(li);
-  });
-}
-
-// 도메인 추가
-function addDomain() {
-  const raw = domainInput.value.trim();
-  if (!raw) return;
-
-  const domain = normalizeDomain(raw);
-
-  if (!isValidDomain(domain)) {
-    showToast("올바른 도메인 형식이 아닙니다. (예: example.com)");
-    return;
-  }
-
-  loadDomains((domains) => {
-    if (domains.some((d) => d.domain === domain)) {
-      showToast("이미 차단 목록에 있는 도메인입니다.");
-      return;
-    }
-
-    const updated = [{ domain, enabled: true }, ...domains];
-    saveDomains(updated, () => {
-      renderList(updated);
-      domainInput.value = "";
-      domainInput.focus();
-      showToast(`${domain} 차단 추가됨`);
-    });
-  });
-}
-
-// 도메인 활성/비활성 토글
-function toggleDomain(index, enabled) {
-  loadDomains((domains) => {
-    const updated = domains.map((item, i) =>
-      i === index ? { ...item, enabled } : item
-    );
-    saveDomains(updated, () => {
-      renderList(updated);
-      showToast(`${updated[index].domain} 차단 ${enabled ? "활성화" : "비활성화"}됨`);
-    });
-  });
-}
-
-// 도메인 삭제
-function removeDomain(index) {
-  loadDomains((domains) => {
-    const removed = domains[index].domain;
-    const updated = domains.filter((_, i) => i !== index);
-    saveDomains(updated, () => {
-      renderList(updated);
-      showToast(`${removed} 삭제됨`);
-    });
-  });
-}
-
-// 전체 삭제
-function clearAll() {
-  loadDomains((domains) => {
-    if (domains.length === 0) return;
-    if (!confirm(`차단 목록의 도메인 ${domains.length}개를 모두 삭제할까요?`)) return;
-
-    saveDomains([], () => {
-      renderList([]);
-      showToast("차단 목록이 비워졌습니다.");
-    });
-  });
-}
-
 // 토스트 알림 표시
 let toastTimer = null;
 function showToast(message) {
@@ -180,6 +56,235 @@ function showToast(message) {
     toast.classList.remove("show");
   }, 2000);
 }
+
+// 도메인 목록(차단 목록 / 하이재킹 방지 목록) 공통 관리 로직
+function createDomainListController(config) {
+  const {
+    storageKey,
+    listEl,
+    countEl,
+    countLabel,
+    inputEl,
+    addBtn,
+    addCurrentBtn,
+    clearBtn,
+    emptyText,
+    alreadyText,
+    addedText,
+    removedText,
+  } = config;
+
+  function load(callback) {
+    chrome.storage.sync.get({ [storageKey]: [] }, (result) => {
+      callback(migrate(result[storageKey]));
+    });
+  }
+
+  function save(domains, callback) {
+    chrome.storage.sync.set({ [storageKey]: domains }, callback);
+  }
+
+  function render(domains) {
+    listEl.innerHTML = "";
+    countEl.textContent = `${countLabel} (${domains.length}개)`;
+
+    if (domains.length === 0) {
+      const li = document.createElement("li");
+      li.className = "empty-message";
+      li.textContent = emptyText;
+      listEl.appendChild(li);
+      return;
+    }
+
+    domains.forEach((item, index) => {
+      const li = document.createElement("li");
+      li.className = "domain-item" + (item.enabled ? "" : " item-disabled");
+
+      const checkLabel = document.createElement("label");
+      checkLabel.className = "item-check-label";
+      checkLabel.title = item.enabled ? "활성" : "비활성";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = item.enabled;
+      checkbox.addEventListener("change", () => toggle(index, checkbox.checked));
+
+      const checkmark = document.createElement("span");
+      checkmark.className = "item-checkmark";
+
+      checkLabel.appendChild(checkbox);
+      checkLabel.appendChild(checkmark);
+
+      const span = document.createElement("span");
+      span.className = "domain-text";
+      span.textContent = item.domain;
+      span.title = item.domain;
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "remove-btn";
+      removeBtn.textContent = "×";
+      removeBtn.title = "삭제";
+      removeBtn.addEventListener("click", () => remove(index));
+
+      li.appendChild(checkLabel);
+      li.appendChild(span);
+      li.appendChild(removeBtn);
+      listEl.appendChild(li);
+    });
+  }
+
+  function addFromInput() {
+    const raw = inputEl.value.trim();
+    if (!raw) return;
+
+    const domain = normalizeDomain(raw);
+    if (!isValidDomain(domain)) {
+      showToast("올바른 도메인 형식이 아닙니다. (예: example.com)");
+      return;
+    }
+
+    load((domains) => {
+      if (domains.some((d) => d.domain === domain)) {
+        showToast(alreadyText);
+        return;
+      }
+
+      const updated = [{ domain, enabled: true }, ...domains];
+      save(updated, () => {
+        render(updated);
+        inputEl.value = "";
+        inputEl.focus();
+        showToast(`${domain} ${addedText}`);
+      });
+    });
+  }
+
+  function toggle(index, enabled) {
+    load((domains) => {
+      const updated = domains.map((item, i) => (i === index ? { ...item, enabled } : item));
+      save(updated, () => {
+        render(updated);
+        showToast(`${updated[index].domain} ${enabled ? "활성화" : "비활성화"}됨`);
+      });
+    });
+  }
+
+  function remove(index) {
+    load((domains) => {
+      const removed = domains[index].domain;
+      const updated = domains.filter((_, i) => i !== index);
+      save(updated, () => {
+        render(updated);
+        showToast(`${removed} ${removedText}`);
+      });
+    });
+  }
+
+  function clearAll() {
+    load((domains) => {
+      if (domains.length === 0) return;
+      if (!confirm(`목록의 도메인 ${domains.length}개를 모두 삭제할까요?`)) return;
+
+      save([], () => {
+        render([]);
+        showToast("목록이 비워졌습니다.");
+      });
+    });
+  }
+
+  function addCurrentSite() {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs[0];
+      if (!tab || !tab.url) {
+        showToast("현재 탭 URL을 가져올 수 없습니다.");
+        return;
+      }
+
+      const url = tab.url;
+      if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) {
+        showToast("브라우저 내부 페이지는 추가할 수 없습니다.");
+        return;
+      }
+
+      const domain = normalizeDomain(url);
+      if (!isValidDomain(domain)) {
+        showToast("유효한 도메인을 가진 페이지가 아닙니다.");
+        return;
+      }
+
+      load((domains) => {
+        if (domains.some((d) => d.domain === domain)) {
+          showToast(alreadyText);
+          return;
+        }
+
+        const updated = [{ domain, enabled: true }, ...domains];
+        save(updated, () => {
+          render(updated);
+          showToast(`${domain} ${addedText}`);
+        });
+      });
+    });
+  }
+
+  function initAddCurrentBtn() {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs[0];
+      if (!tab || !tab.url) return;
+
+      const url = tab.url;
+      if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) {
+        addCurrentBtn.disabled = true;
+        addCurrentBtn.textContent = "+ 현재 사이트 추가 불가";
+        return;
+      }
+
+      const domain = normalizeDomain(url);
+      if (domain) {
+        addCurrentBtn.textContent = `+ 현재 사이트 추가 (${domain})`;
+      }
+    });
+  }
+
+  addBtn.addEventListener("click", addFromInput);
+  clearBtn.addEventListener("click", clearAll);
+  addCurrentBtn.addEventListener("click", addCurrentSite);
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") addFromInput();
+  });
+
+  return { load, render, initAddCurrentBtn };
+}
+
+const blockListController = createDomainListController({
+  storageKey: "blockedDomains",
+  listEl: domainList,
+  countEl: domainCount,
+  countLabel: "차단 목록",
+  inputEl: domainInput,
+  addBtn,
+  addCurrentBtn,
+  clearBtn,
+  emptyText: "차단된 도메인이 없습니다.",
+  alreadyText: "이미 차단 목록에 있는 도메인입니다.",
+  addedText: "차단 추가됨",
+  removedText: "삭제됨",
+});
+
+const hijackListController = createDomainListController({
+  storageKey: "hijackProtectedDomains",
+  listEl: hijackList,
+  countEl: hijackCount,
+  countLabel: "하이재킹 방지 목록",
+  inputEl: hijackInput,
+  addBtn: hijackAddBtn,
+  addCurrentBtn: hijackAddCurrentBtn,
+  clearBtn: hijackClearBtn,
+  emptyText: "등록된 도메인이 없습니다.",
+  alreadyText: "이미 하이재킹 방지 목록에 있는 도메인입니다.",
+  addedText: "하이재킹 방지 추가됨",
+  removedText: "삭제됨",
+});
 
 // 헤더 및 토글 텍스트 상태 반영
 function applyBlockingState(enabled) {
@@ -209,75 +314,14 @@ function saveBlockingEnabled() {
   showToast(enabled ? "차단 활성화됨" : "차단 일시 중단됨");
 }
 
-// 현재 탭의 도메인을 목록에 추가
-function addCurrentSite() {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const tab = tabs[0];
-    if (!tab || !tab.url) {
-      showToast("현재 탭 URL을 가져올 수 없습니다.");
-      return;
-    }
-
-    const url = tab.url;
-    if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) {
-      showToast("브라우저 내부 페이지는 추가할 수 없습니다.");
-      return;
-    }
-
-    const domain = normalizeDomain(url);
-    if (!isValidDomain(domain)) {
-      showToast("유효한 도메인을 가진 페이지가 아닙니다.");
-      return;
-    }
-
-    loadDomains((domains) => {
-      if (domains.some((d) => d.domain === domain)) {
-        showToast("이미 차단 목록에 있는 도메인입니다.");
-        return;
-      }
-
-      const updated = [{ domain, enabled: true }, ...domains];
-      saveDomains(updated, () => {
-        renderList(updated);
-        showToast(`${domain} 차단 추가됨`);
-      });
-    });
-  });
-}
-
-// 현재 탭 도메인으로 버튼 텍스트 초기화
-function initAddCurrentBtn() {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    const tab = tabs[0];
-    if (!tab || !tab.url) return;
-
-    const url = tab.url;
-    if (url.startsWith("chrome://") || url.startsWith("chrome-extension://") || url.startsWith("about:")) {
-      addCurrentBtn.disabled = true;
-      addCurrentBtn.textContent = "+ 현재 사이트 추가 불가";
-      return;
-    }
-
-    const domain = normalizeDomain(url);
-    if (domain) {
-      addCurrentBtn.textContent = `+ 현재 사이트 추가 (${domain})`;
-    }
-  });
-}
-
 // 이벤트 등록
-addBtn.addEventListener("click", addDomain);
-clearBtn.addEventListener("click", clearAll);
 closeTabOption.addEventListener("change", saveOption);
 blockingEnabled.addEventListener("change", saveBlockingEnabled);
-addCurrentBtn.addEventListener("click", addCurrentSite);
-
-domainInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") addDomain();
-});
 
 // 초기 로드
-loadDomains(renderList);
+blockListController.load(blockListController.render);
+hijackListController.load(hijackListController.render);
 loadOptions();
-initAddCurrentBtn();
+blockListController.initAddCurrentBtn();
+hijackListController.initAddCurrentBtn();
 domainInput.focus();

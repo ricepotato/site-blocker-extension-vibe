@@ -46,11 +46,39 @@
 
     <section class="list-section">
       <div class="list-header">
-        <span id="domain-count">차단 목록 (0개)</span>
+        <span id="domain-count" class="section-count">차단 목록 (0개)</span>
         <button id="clear-btn" class="danger-btn">전체 삭제</button>
       </div>
-      <ul id="domain-list">
+      <ul id="domain-list" class="item-list">
         <li class="empty-message">차단된 도메인이 없습니다.</li>
+      </ul>
+    </section>
+
+    <div class="section-divider"></div>
+
+    <section class="input-section">
+      <label for="hijack-input">링크 하이재킹 방지 도메인 추가</label>
+      <div class="input-row">
+        <input
+          type="text"
+          id="hijack-input"
+          placeholder="예: example.com"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <button id="hijack-add-btn">추가</button>
+      </div>
+      <button id="hijack-add-current-btn">+ 현재 사이트 추가</button>
+      <p class="hint">등록한 도메인에서 다른 도메인으로 여는 window.open 호출을 차단합니다. (서브도메인 포함)</p>
+    </section>
+
+    <section class="list-section">
+      <div class="list-header">
+        <span id="hijack-count" class="section-count">하이재킹 방지 목록 (0개)</span>
+        <button id="hijack-clear-btn" class="danger-btn">전체 삭제</button>
+      </div>
+      <ul id="hijack-list" class="item-list">
+        <li class="empty-message">등록된 도메인이 없습니다.</li>
       </ul>
     </section>
   </div>

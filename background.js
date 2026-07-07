@@ -46,6 +46,85 @@ async function blockTab(tabId, hostname) {
   }
 }
 
+// ===== 링크 하이재킹 방지 =====
+
+const HIJACK_SCRIPT_ID = "hijack-guard-main";
+const hijackBlockCounts = new Map(); // tabId -> 차단 횟수
+
+// hijackProtectedDomains -> chrome.scripting match 패턴 목록으로 변환 (서브도메인 포함)
+function buildHijackMatchPatterns(hijackProtectedDomains) {
+  const patterns = [];
+  migrate(hijackProtectedDomains).forEach((item) => {
+    if (!item.enabled) return;
+    const domain = item.domain.toLowerCase().trim();
+    if (!domain) return;
+    patterns.push(`*://${domain}/*`, `*://*.${domain}/*`);
+  });
+  return patterns;
+}
+
+// 활성화된 하이재킹 방지 도메인 목록에 맞춰 MAIN 월드 주입 스크립트를 등록/갱신/해제
+async function syncHijackGuardScript() {
+  const { hijackProtectedDomains } = await new Promise((resolve) => {
+    chrome.storage.sync.get({ hijackProtectedDomains: [] }, resolve);
+  });
+
+  const matches = buildHijackMatchPatterns(hijackProtectedDomains);
+  const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [HIJACK_SCRIPT_ID] });
+
+  if (matches.length === 0) {
+    if (existing.length > 0) {
+      await chrome.scripting.unregisterContentScripts({ ids: [HIJACK_SCRIPT_ID] });
+    }
+    return;
+  }
+
+  const scriptConfig = {
+    id: HIJACK_SCRIPT_ID,
+    js: ["hijack-main.js"],
+    matches,
+    world: "MAIN",
+    runAt: "document_start",
+    allFrames: true,
+  };
+
+  if (existing.length > 0) {
+    await chrome.scripting.updateContentScripts([scriptConfig]);
+  } else {
+    await chrome.scripting.registerContentScripts([scriptConfig]);
+  }
+}
+
+// 도메인 목록이 바뀔 때마다 주입 스크립트 재등록
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "sync" && changes.hijackProtectedDomains) {
+    syncHijackGuardScript();
+  }
+});
+
+// 서비스워커 기동 시마다 현재 저장된 목록과 동기화
+syncHijackGuardScript();
+
+// 하이재킹 차단 뱃지 갱신
+function resetHijackBadge(tabId) {
+  hijackBlockCounts.delete(tabId);
+  chrome.action.setBadgeText({ tabId, text: "" });
+}
+
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type === "hijack-blocked" && sender.tab?.id != null) {
+    const tabId = sender.tab.id;
+    const count = (hijackBlockCounts.get(tabId) || 0) + 1;
+    hijackBlockCounts.set(tabId, count);
+    chrome.action.setBadgeText({ tabId, text: String(count) });
+    chrome.action.setBadgeBackgroundColor({ tabId, color: "#c0392b" });
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  hijackBlockCounts.delete(tabId);
+});
+
 // 탭이 차단 대상인지 확인 후 처리
 async function checkAndBlockTab(tabId, url) {
   if (!url || url.startsWith("chrome://") || url.startsWith("chrome-extension://")) {
@@ -74,6 +153,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 // 웹 내비게이션 이벤트 감지 (더 빠른 차단)
 chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
   if (details.frameId !== 0) return; // 메인 프레임만 처리
+
+  resetHijackBadge(details.tabId);
 
   const hostname = extractDomain(details.url);
   if (!hostname) return;
