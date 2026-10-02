@@ -2,7 +2,7 @@
 async function getSettings() {
   return new Promise((resolve) => {
     chrome.storage.sync.get(
-      { blockedDomains: [], closeTabOnBlock: false, blockingEnabled: true },
+      { blockedDomains: [], closeTabOnBlock: false, ignoreOnBlock: false, blockingEnabled: true },
       (result) => { resolve(result); }
     );
   });
@@ -34,10 +34,12 @@ function isDomainBlocked(hostname, blockedDomains) {
   });
 }
 
-// 차단 동작 실행: 옵션에 따라 탭 즉시 닫기 또는 차단 페이지로 이동
+// 차단 동작 실행: 옵션에 따라 무시(탭 열지 않기), 탭 즉시 닫기, 차단 페이지로 이동
 async function blockTab(tabId, hostname) {
-  const { closeTabOnBlock } = await getSettings();
-  if (closeTabOnBlock) {
+  const { closeTabOnBlock, ignoreOnBlock } = await getSettings();
+  if (ignoreOnBlock) {
+    ignoreTab(tabId);
+  } else if (closeTabOnBlock) {
     chrome.tabs.remove(tabId);
   } else {
     chrome.tabs.update(tabId, {
@@ -45,6 +47,79 @@ async function blockTab(tabId, hostname) {
     });
   }
 }
+
+// ===== 차단 시 탭 열지 않기 (ignore 모드) =====
+// 차단 도메인으로 향하는 클릭/window.open은 ignore-guard 콘텐츠 스크립트가 미리 취소한다.
+// 아래는 그 단계에서 못 잡은 경우(리다이렉트, 주소창 입력 등)를 위한 대비책이다.
+
+const IGNORE_LOOP_WINDOW_MS = 5000;
+const ignoreStates = new Map(); // tabId -> { time, committedSinceRestore }
+
+function removeTabQuietly(tabId) {
+  ignoreStates.delete(tabId);
+  chrome.tabs.remove(tabId).catch(() => {}); // 여러 이벤트에서 중복 호출될 수 있음
+}
+
+// 새로 열린 탭이면 제거하고, 기존 탭이면 이동을 취소해 원래 페이지에 머무르게 한다
+async function ignoreTab(tabId) {
+  let tab;
+  try {
+    tab = await chrome.tabs.get(tabId);
+  } catch {
+    return; // 이미 닫힌 탭
+  }
+
+  const { blockedDomains } = await getSettings();
+  const committedUrl = tab.url || "";
+  const committedHost = /^https?:/.test(committedUrl) ? extractDomain(committedUrl) : null;
+
+  // 이전에 보던 일반 웹페이지가 없으면(새 탭, 빈 탭, 이미 차단 페이지) 탭 자체를 제거
+  if (!committedHost || isDomainBlocked(committedHost, blockedDomains)) {
+    removeTabQuietly(tabId);
+    return;
+  }
+
+  const state = ignoreStates.get(tabId);
+  if (state && !state.committedSinceRestore) {
+    return; // 같은 이동에 대해 onBeforeNavigate/onUpdated가 중복으로 호출된 경우
+  }
+  if (state && Date.now() - state.time < IGNORE_LOOP_WINDOW_MS) {
+    // 원래 페이지가 다시 차단 도메인으로 보내는 경우 무한 반복을 막기 위해 탭을 닫는다
+    removeTabQuietly(tabId);
+    return;
+  }
+
+  ignoreStates.set(tabId, { time: Date.now(), committedSinceRestore: false });
+  // 마지막으로 커밋된 URL로 다시 이동시켜 진행 중인 이동을 취소
+  chrome.tabs.update(tabId, { url: committedUrl }).catch(() => {});
+}
+
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId !== 0) return;
+  const state = ignoreStates.get(details.tabId);
+  if (state) state.committedSinceRestore = true;
+});
+
+// 페이지 등에서 새 탭/창이 만들어진 직후 차단 대상이면 바로 제거
+async function removeIfIgnoredTarget(tabId, url) {
+  const hostname = url && /^https?:/.test(url) ? extractDomain(url) : null;
+  if (!hostname) return;
+
+  const { blockedDomains, blockingEnabled, ignoreOnBlock } = await getSettings();
+  if (!blockingEnabled || !ignoreOnBlock) return;
+
+  if (isDomainBlocked(hostname, blockedDomains)) {
+    removeTabQuietly(tabId);
+  }
+}
+
+chrome.tabs.onCreated.addListener((tab) => {
+  removeIfIgnoredTarget(tab.id, tab.pendingUrl || tab.url);
+});
+
+chrome.webNavigation.onCreatedNavigationTarget.addListener((details) => {
+  removeIfIgnoredTarget(details.tabId, details.url);
+});
 
 // ===== 링크 하이재킹 방지 =====
 
@@ -123,6 +198,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   hijackBlockCounts.delete(tabId);
+  ignoreStates.delete(tabId);
 });
 
 // 탭이 차단 대상인지 확인 후 처리

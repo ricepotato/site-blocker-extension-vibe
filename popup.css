@@ -199,6 +199,9 @@ header.disabled .toggle-label input[type="checkbox"]:checked + .toggle-track .to
 
 /* Options section */
 .options-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
   padding: 10px 16px;
   background: white;
   border-bottom: 1px solid #e8eaed;

@@ -4,6 +4,7 @@ const clearBtn = document.getElementById("clear-btn");
 const domainList = document.getElementById("domain-list");
 const domainCount = document.getElementById("domain-count");
 const closeTabOption = document.getElementById("close-tab-option");
+const ignoreOption = document.getElementById("ignore-option");
 const addCurrentBtn = document.getElementById("add-current-btn");
 const blockingEnabled = document.getElementById("blocking-enabled");
 const mainHeader = document.getElementById("main-header");
@@ -295,15 +296,24 @@ function applyBlockingState(enabled) {
 
 // 옵션 불러오기
 function loadOptions() {
-  chrome.storage.sync.get({ closeTabOnBlock: false, blockingEnabled: true }, (result) => {
-    closeTabOption.checked = result.closeTabOnBlock;
+  chrome.storage.sync.get({ closeTabOnBlock: false, ignoreOnBlock: false, blockingEnabled: true }, (result) => {
+    ignoreOption.checked = result.ignoreOnBlock;
+    closeTabOption.checked = result.closeTabOnBlock && !result.ignoreOnBlock;
     applyBlockingState(result.blockingEnabled);
   });
 }
 
-// 옵션 저장
-function saveOption() {
-  chrome.storage.sync.set({ closeTabOnBlock: closeTabOption.checked });
+// 옵션 저장: '탭 즉시 닫기'와 '탭 열지 않기'는 동시에 켤 수 없다
+function saveOption(event) {
+  if (event.target === ignoreOption && ignoreOption.checked) {
+    closeTabOption.checked = false;
+  } else if (event.target === closeTabOption && closeTabOption.checked) {
+    ignoreOption.checked = false;
+  }
+  chrome.storage.sync.set({
+    closeTabOnBlock: closeTabOption.checked,
+    ignoreOnBlock: ignoreOption.checked,
+  });
 }
 
 // 차단 활성/비활성 저장 및 UI 반영
@@ -316,6 +326,7 @@ function saveBlockingEnabled() {
 
 // 이벤트 등록
 closeTabOption.addEventListener("change", saveOption);
+ignoreOption.addEventListener("change", saveOption);
 blockingEnabled.addEventListener("change", saveBlockingEnabled);
 
 // 초기 로드

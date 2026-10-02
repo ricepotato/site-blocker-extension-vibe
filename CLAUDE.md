@@ -24,7 +24,11 @@ The extension has two independent execution contexts that communicate only throu
 - `chrome.webNavigation.onBeforeNavigate` — fires before the page loads (primary, faster)
 - `chrome.tabs.onUpdated` — fires on `loading` status (fallback)
 
-When a blocked domain is matched, `blockTab()` reads `closeTabOnBlock` from storage and either calls `chrome.tabs.remove()` or redirects to `blocked.html`.
+When a blocked domain is matched, `blockTab()` reads `ignoreOnBlock` / `closeTabOnBlock` from storage and either ignores the navigation (`ignoreTab()`), calls `chrome.tabs.remove()`, or redirects to `blocked.html`.
+
+**Ignore mode (`ignoreOnBlock`)** — tabs can't be prevented from being created via extension APIs, so this is layered:
+- `ignore-guard.js` (isolated world) cancels link clicks / form submits to blocked domains and answers `window.open` checks from `ignore-guard-main.js` (MAIN world) via a synchronous cancelable `CustomEvent`. The blocklist stays in the isolated world.
+- Fallback in `background.js`: new tabs targeting a blocked domain are removed (`tabs.onCreated`, `webNavigation.onCreatedNavigationTarget`); existing tabs are re-navigated to their last committed URL, with loop protection (closes the tab if the restored page redirects back within 5s).
 
 **Popup (`popup.html` / `popup.js`)** — renders on icon click, reads/writes `chrome.storage.sync` directly. No message passing to the background worker.
 
@@ -35,7 +39,8 @@ All data lives in `chrome.storage.sync` under two keys:
 ```js
 {
   blockedDomains: string[],   // e.g. ["evil.com", "phish.example.org"]
-  closeTabOnBlock: boolean    // false = show blocked.html, true = close tab
+  closeTabOnBlock: boolean,   // false = show blocked.html, true = close tab
+  ignoreOnBlock: boolean      // true = ignore mode (don't open the tab); takes precedence, mutually exclusive with closeTabOnBlock in the popup
 }
 ```
 
