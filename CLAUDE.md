@@ -32,6 +32,8 @@ When a blocked domain is matched, `blockTab()` reads `ignoreOnBlock` / `closeTab
 
 **Popup (`popup.html` / `popup.js`)** — renders on icon click, reads/writes `chrome.storage.sync` directly. No message passing to the background worker.
 
+**Link hijack guard (`hijackProtectedDomains`)** — `background.js` registers `hijack-main.js` (MAIN world) only on protected domains. It blocks script-initiated cross-domain opens: `window.open`, `HTMLElement.prototype.click()` and `EventTarget.prototype.dispatchEvent` of `click` events on links (incl. detached `<a>` elements). Real user clicks don't go through these methods, so they are unaffected. Blocks are reported via `postMessage` → `hijack-relay.js` → badge count.
+
 ## Storage schema
 
 All data lives in `chrome.storage.sync` under two keys:
